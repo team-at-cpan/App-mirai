@@ -10,6 +10,8 @@ use List::UtilsBy ();
 
 use Carp qw(cluck);
 
+use App::mirai::Watcher;
+
 our %FUTURE_MAP;
 our @WATCHERS;
 
@@ -21,10 +23,10 @@ Returns a new L<App::mirai::Watcher>.
 
 sub create_watcher {
 	my $class = shift;
-	push @watchers, my $w = App::mirai::Watcher->new;
+	push @WATCHERS, my $w = App::mirai::Watcher->new;
 	$w->subscribe_to_event(@_) if @_;
 	# explicit discard
-#	Scalar::Util::weaken $watchers[-1];
+#	Scalar::Util::weaken $WATCHERS[-1];
 	$w
 }
 
@@ -37,7 +39,7 @@ Deletes the given watcher.
 sub delete_watcher {
 	my ($class, $w) = @_;
 	$w = Scalar::Util::refaddr $w;
-	List::UtilsBy::extract_by { Scalar::Util::refaddr($_) eq $w } @watchers;
+	List::UtilsBy::extract_by { Scalar::Util::refaddr($_) eq $w } @WATCHERS;
 	()
 }
 
@@ -48,7 +50,7 @@ Returns all the Futures we know about.
 =cut
 
 sub futures {
-	grep defined, map $_->{future}, sort values %fm
+	grep defined, map $_->{future}, sort values %FUTURE_MAP
 }
 
 =head1 MONKEY PATCHES
@@ -58,16 +60,16 @@ sub futures {
 sub Future::DESTROY {
 	my $f = shift;
 	# my $f = $destructor->(@_);
-	my $entry = delete $fm{$f};
-	$_->invoke_event(destroy => $f) for grep defined, @watchers;
+	my $entry = delete $FUTURE_MAP{$f};
+	$_->invoke_event(destroy => $f) for grep defined, @WATCHERS;
 	$f
 }
 
 BEGIN {
 	my $prep = sub {
 		my $f = shift;
-		if(exists $fm{$f}) {
-			$fm{$f}{type} = (exists $f->{subs} ? 'dependent' : 'leaf');
+		if(exists $FUTURE_MAP{$f}) {
+			$FUTURE_MAP{$f}{type} = (exists $f->{subs} ? 'dependent' : 'leaf');
 			return $f;
 		}
 		$f->{constructed_at} = do {
@@ -84,13 +86,13 @@ BEGIN {
 			],
 		};
 		Scalar::Util::weaken($entry->{future});
-		$fm{$f} = $entry;
-		$f->label('unknown')->created(0);
+		$FUTURE_MAP{$f} = $entry;
+		$f->set_label('unknown')->created(0);
 		my $name = "$f";
 		$f->on_ready(sub {
 			my $f = shift;
 			# cluck "here -> $f";
-			$_->invoke_event(on_ready => $f) for grep defined, @watchers;
+			$_->invoke_event(on_ready => $f) for grep defined, @WATCHERS;
 		});
 	};
 
@@ -100,7 +102,7 @@ BEGIN {
 			sub {
 				my $f = $constructor->(@_);
 				$prep->($f);
-				$_->invoke_event(create => $f) for grep defined, @watchers;
+				$_->invoke_event(create => $f) for grep defined, @WATCHERS;
 				$f
 			};
 		},
@@ -110,14 +112,14 @@ BEGIN {
 				my @subs = @{$_[1]};
 				my $f = $constructor->(@_);
 				$prep->($f);
-				my $entry = $fm{$f};
+				my $entry = $FUTURE_MAP{$f};
 				# Inform subs that they have a new parent
 				for(@subs) {
-					die "missing fm for $_?" unless exists $fm{$_};
-					push @{$fm{$_}{dependents}}, $f;
-					Scalar::Util::weaken($fm{$_}{dependents}[-1]);
+					die "missing future map entry for $_?" unless exists $FUTURE_MAP{$_};
+					push @{$FUTURE_MAP{$_}{dependents}}, $f;
+					Scalar::Util::weaken($FUTURE_MAP{$_}{dependents}[-1]);
 				}
-				$_->invoke_event(create => $f) for grep defined, @watchers;
+				$_->invoke_event(create => $f) for grep defined, @WATCHERS;
 				$f
 			};
 		},

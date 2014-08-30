@@ -3,6 +3,7 @@ package irai;
 use strict;
 use warnings;
 
+# Actual work is done by loading this module
 use App::mirai::Future;
 
 1;

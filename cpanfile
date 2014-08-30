@@ -1,8 +1,9 @@
 requires 'parent', 0;
 requires 'curry', 0;
+requires 'Variable::Disposition', 0;
 requires 'Future', '>= 0.29';
 requires 'Mixin::Event::Dispatch', '>= 1.006';
-requires 'Tickit::DSL', '>= 0.015';
+requires 'Tickit::DSL', '>= 0.017';
 requires 'File::HomeDir', '>= 1.00';
 requires 'JSON::MaybeXS', 0;
 

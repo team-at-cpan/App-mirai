@@ -17,7 +17,7 @@ BEGIN {
 # courtesy of Tickit::Widget::Truetype, static render
 # so we don't have to drag in Imager::Font.
 my @logo = (
-	'      █           █      ',
+	'      █   Mirai   █      ',
 	'      █           █      ',
 	'  ▝▀▀▀█▀▀▀▘   ▀▜▀▀█▀▀▛▀  ',
 	'      █        ▜▖ █ ▗▛   ',

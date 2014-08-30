@@ -45,6 +45,8 @@ sub delete_watcher {
 	()
 }
 
+sub future { $FUTURE_MAP{$_[1]} }
+
 =head1 futures
 
 Returns all the Futures we know about.

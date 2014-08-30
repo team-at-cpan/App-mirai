@@ -142,12 +142,6 @@ sub apply_layout {
 					  'parent:lines' => 5,
 					  'parent:label' => 'Futures';
 					tabbed {
-						table {
-						} columns => [
-							{ label => 'Created' },
-							{ label => 'Type' },
-							{ label => 'Elapsed' },
-						], 'parent:label' => 'Pending (1)';
 						{ # Cancelled
 							my $tbl;
 							my $truncate = sub {
@@ -158,7 +152,8 @@ sub apply_layout {
 							};
 							$tbl = table {
 								my ($row, $future) = @_;
-							} item_transformations => [sub {
+							} failure_transformations => sub { ' ' },
+							  item_transformations => [sub {
 								my ($row, $f) = @_;
 								my $info = App::mirai::Future->future($f);
 								my $elapsed = $f->elapsed;
@@ -173,10 +168,25 @@ sub apply_layout {
 							}], columns => [
 								{ label => 'Label' },
 								{ label => 'Created', transform => [$truncate] },
-								{ label => 'Cancelled', transform => [$truncate] },
+								{ label => 'Ready', transform => [$truncate] },
 								{ label => 'Type', width => 5 },
 								{ label => 'Elapsed', align => 'right', width => 12},
 							], 'parent:label' => 'Pending (1)';
+
+							$tbl->adapter->bus->subscribe_to_event(
+								splice => sub {
+									my ($ev, $idx, $len, $data) = @_;
+									$_->on_ready(sub {
+										my $f = shift;
+										my $old_idx = $idx;
+										my $task = $tbl->adapter->find_from($idx, $f)->on_done(sub {
+											my ($idx) = @_;
+											$tbl->adapter->bus->invoke_event(modify => $idx => $f);
+										})->on_fail(sub { warn "failed? @_"});
+										$task->on_ready(sub { undef $task });
+									}) for @$data;
+								}
+							);
 							$tbl->adapter->push([ my $f = Future->new->set_label('test') ]);
 							tickit->later($f->curry::done);
 						}

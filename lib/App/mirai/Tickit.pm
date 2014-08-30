@@ -17,6 +17,15 @@ my $path = File::HomeDir->my_dist_data(
 	{ create => 1 }
 );
 
+Tickit::Style->load_style(<<'EOF');
+Breadcrumb {
+ powerline: 1;
+ highlight-bg: 238;
+}
+MenuBar { bg: 'blue'; fg: 'hi-yellow'; rv: 0; }
+Menu { bg: '232'; fg: 'white'; rv: 0; }
+EOF
+
 sub new { bless {}, shift }
 
 sub app_about {

@@ -34,6 +34,9 @@ EOF
 sub new { bless {}, shift }
 
 sub app_about {
+	my $vbox = shift;
+	my ($tw, $th) = map $vbox->window->$_, qw(cols lines);
+	my ($w, $h) = (34, 18);
 	float {
 		my $f = shift;
 		frame {
@@ -41,19 +44,23 @@ sub app_about {
 				customwidget {
 					App::mirai::Tickit::Widget::Logo->new
 				};
-				static 'A tool for debugging Futures', 'parent:expand' => 1;
-				button {
-					$f->remove;
-				} 'OK';
-			}
+				static 'A tool for debugging Futures', align => 0.5, 'parent:expand' => 1;
+				hbox {
+					static ' ', 'parent:expand' => 1;
+					button {
+						$f->remove;
+					} 'OK';
+					static ' ', 'parent:expand' => 1;
+				};
+			} style => { spacing => 1 };
 		} title => '未来',
 		  style => {
 			linetype => 'single'
 		}
-	} top => 2,
-	  left => 2,
-	  right => -2,
-	  bottom => -2;
+	} top => int(($th-$h)/2),
+	  left => int(($tw-$w)/2),
+	  right => int($tw - ($tw-$w)/2),
+	  bottom => int($th - ($th-$h)/2);
 }
 
 sub app_menu {

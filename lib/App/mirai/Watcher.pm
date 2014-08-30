@@ -10,9 +10,8 @@ use Variable::Disposition;
 sub new { my $class = shift; bless { @_ }, $class }
 
 sub discard {
-	my $self = shift;
-	App::mirai::Future->delete_watcher($self);
-	dispose $self;
+	App::mirai::Future->delete_watcher($_[0]);
+	dispose $_[0];
 }
 
 1;

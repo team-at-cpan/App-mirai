@@ -12,6 +12,8 @@ use Carp qw(cluck);
 
 use App::mirai::Watcher;
 
+BEGIN { $Future::TIMES = 1 }
+
 our %FUTURE_MAP;
 our @WATCHERS;
 
@@ -87,7 +89,7 @@ BEGIN {
 		};
 		Scalar::Util::weaken($entry->{future});
 		$FUTURE_MAP{$f} = $entry;
-		$f->set_label('unknown')->created(0);
+		$f->set_label('unknown');
 		my $name = "$f";
 		$f->on_ready(sub {
 			my $f = shift;
@@ -119,7 +121,7 @@ BEGIN {
 					push @{$FUTURE_MAP{$_}{dependents}}, $f;
 					Scalar::Util::weaken($FUTURE_MAP{$_}{dependents}[-1]);
 				}
-				$_->invoke_event(create => $f) for grep defined, @WATCHERS;
+				$_->invoke_event(dependent => $f) for grep defined, @WATCHERS;
 				$f
 			};
 		},

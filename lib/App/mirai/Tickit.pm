@@ -17,6 +17,8 @@ my $path = File::HomeDir->my_dist_data(
 	{ create => 1 }
 );
 
+sub new { bless {}, shift }
+
 sub app_about {
 	float {
 		my $f = shift;
@@ -80,68 +82,92 @@ sub app_menu {
 	};
 }
 
-vbox {
-	floatbox {
-		vbox {
-			app_menu();
-			$widget{desktop} = desktop {
-				tree {
-				} data => [
-					label1 => [
-						qw(label2 label3 label4)
-					],
-					labael2 => [
-						qw(labelx)
-					]
-				], 'parent:top' => 3,
-				   'parent:left' => 3,
-				   'parent:lines' => 5,
-				   'parent:label' => 'tree of things';
-				tabbed {
-					static 'tab 1', 'parent:label' => 'first';
-					static 'tab 2', 'parent:label' => 'second';
-				} ribbon_class => 'App::mirai::Tickit::TabRibbon',
-				  tab_position => 'top';
-			} 'parent:expand' => 1;
-		}
-	} 'parent:expand' => 1;
-	$widget{statusbar} = statusbar { };
-};
-$widget{statusbar}->update_status(
-	String::Tagged->new(
-		"home \N{U+E0B1} tom \N{U+E0B1} test \N{U+E0B0} yeah \N{U+E0B0} something \N{U+E0B2} status would be here"
-	)
-	 ->apply_tag( 0, 6, fg => 'blue')
-	 ->apply_tag(11, 6, fg => 'green')
-	 ->apply_tag(18, 8, fg => 'grey')
-	 ->apply_tag(18, 7, rv => 1)
-	 ->apply_tag(38, 21, rv => 1)
-);
-
-if(-r "$path/last_session") {
-	open my $fh, '<', "$path/last_session" or die $!;
-	my $session = decode_json(do { local $/; <$fh> });
-	tickit->later(sub {
-		my @win = @{$widget{desktop}->{widgets}};
-		for my $widget (@win) {
-			my $label = $widget->label;
-			warn "have widget with label $label";
-			if(exists $session->{$label}) {
-				warn "Set geometry: ", join(',', @{$session->{$label}->{geometry}});
-				$widget->window->change_geometry(
-					@{$session->{$label}->{geometry}}
-				)
+sub apply_layout {
+	vbox {
+		floatbox {
+			vbox {
+				app_menu();
+				$widget{desktop} = desktop {
+					vbox {
+						my $bc = breadcrumb {
+						} item_transformations => sub {
+							my ($item) = @_;
+							return '' if $item->name eq 'Root';
+							$item->name
+						};
+						my $tree = tree {
+						} data => [
+							Pending => [
+								qw(label2 label3 label4)
+							],
+							Done => [
+								qw(label5)
+							],
+							Failed => [
+								qw(label6)
+							],
+							Cancelled => [
+								qw(label7)
+							],
+							Dependents => [
+								needs_all => [
+									qw(label2 label4)
+								]
+							],
+						];
+						$bc->adapter($tree->position_adapter);
+					} 'parent:top' => 3,
+					  'parent:left' => 3,
+					  'parent:lines' => 5,
+					  'parent:label' => 'Futures';
+					tabbed {
+						static 'tab 1', 'parent:label' => 'Pending (1)';
+						static 'tab 2', 'parent:label' => 'Done (23)';
+						static 'tab 2', 'parent:label' => 'Failed (42)';
+						static 'tab 2', 'parent:label' => 'Cancelled (123)';
+					} ribbon_class => 'App::mirai::Tickit::TabRibbon',
+					  tab_position => 'top',
+					  'parent:label' => 'By state';
+					fileviewer {
+					} 'example.pl',
+					  'tabsize' => 4,
+					  'parent:label' => 'example.pl';
+				} 'parent:expand' => 1;
 			}
-		}
-		$win[0]->{linked_widgets}{right} = [
-			left => $win[1]
-		];
-		$win[0]->{linked_widgets}{top} = [
-			top => $win[1]
-		];
-	});
+		} 'parent:expand' => 1;
+		$widget{statusbar} = statusbar { };
+	};
+	$widget{statusbar}->update_status('OK');
 }
-tickit->run;
+
+sub run {
+	my ($self) = @_;
+	apply_layout();
+	if(-r "$path/last_session") {
+		open my $fh, '<', "$path/last_session" or die $!;
+		my $session = decode_json(do { local $/; <$fh> });
+		tickit->later(sub {
+			my @win = @{$widget{desktop}->{widgets}};
+			for my $widget (@win) {
+				my $label = $widget->label;
+				warn "have widget with label $label";
+				if(exists $session->{$label}) {
+					warn "Set geometry: ", join(',', @{$session->{$label}->{geometry}});
+					$widget->window->change_geometry(
+						@{$session->{$label}->{geometry}}
+					)
+				}
+			}
+			$win[0]->{linked_widgets}{right} = [
+				left => $win[1]
+			];
+			$win[0]->{linked_widgets}{top} = [
+				top => $win[1]
+			];
+		});
+	}
+	tickit->run;
+}
 
 1;
 

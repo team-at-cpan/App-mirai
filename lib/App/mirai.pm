@@ -52,7 +52,10 @@ sub new_from_argv {
 	bless {}, $class
 }
 
-sub run { }
+sub run {
+	my $self = shift;
+	App::mirai::Tickit->new->run;
+}
 
 1;
 

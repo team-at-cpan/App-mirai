@@ -72,6 +72,7 @@ sub Future::DESTROY {
 BEGIN {
 	my $prep = sub {
 		my $f = shift;
+		my (undef, $file, $line) = caller(1);
 		if(exists $FUTURE_MAP{$f}) {
 			$FUTURE_MAP{$f}{type} = (exists $f->{subs} ? 'dependent' : 'leaf');
 			return $f;
@@ -86,6 +87,7 @@ BEGIN {
 			future => $f,
 			dependents => [ ],
 			type => (exists $f->{subs} ? 'dependent' : 'leaf'),
+			created_at => "$file:$line",
 			nodes => [
 			],
 		};
@@ -95,6 +97,8 @@ BEGIN {
 		my $name = "$f";
 		$f->on_ready(sub {
 			my $f = shift;
+			my (undef, $file, $line) = caller(2);
+			$FUTURE_MAP{$f}->{ready_at} = "$file:$line";
 			# cluck "here -> $f";
 			$_->invoke_event(on_ready => $f) for grep defined, @WATCHERS;
 		});

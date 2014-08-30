@@ -41,6 +41,7 @@ Japanese vocabulary.
 
 =cut
 
+use App::mirai::Future;
 use App::mirai::Tickit;
 
 =head1 METHODS

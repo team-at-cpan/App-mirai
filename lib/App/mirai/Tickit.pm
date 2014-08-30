@@ -97,7 +97,7 @@ sub app_menu {
 		menuspacer;
 		submenu Help => sub {
 			menuitem About => sub {
-				app_about();
+				app_about(@_);
 			};
 		};
 	};

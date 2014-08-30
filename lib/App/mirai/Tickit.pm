@@ -5,8 +5,11 @@ use warnings;
 use utf8;
 
 use Tickit::DSL qw(:async);
+use Tickit::Utils qw(substrwidth textwidth);
 use App::mirai::Tickit::TabRibbon;
 use App::mirai::Tickit::Widget::Logo;
+use Future;
+use POSIX qw(strftime);
 
 use File::HomeDir;
 use JSON::MaybeXS;
@@ -130,8 +133,44 @@ sub apply_layout {
 					  'parent:lines' => 5,
 					  'parent:label' => 'Futures';
 					tabbed {
-						static 'tab 1', 'parent:label' => 'Pending (1)';
-						static 'tab 2', 'parent:label' => 'Done (23)';
+						table {
+						} columns => [
+							{ label => 'Created' },
+							{ label => 'Type' },
+							{ label => 'Elapsed' },
+						], 'parent:label' => 'Pending (1)';
+						{ # Cancelled
+							my $tbl;
+							my $truncate = sub {
+								my ($row, $col, $item) = @_;
+								my $def = $tbl->{columns}[$col];
+								return Future->wrap($item) unless textwidth($item) > $def->{value};
+								Future->wrap(substrwidth $item, textwidth($item) - $def->{value});
+							};
+							$tbl = table {
+								my ($row, $future) = @_;
+							} item_transformations => [sub {
+								my ($row, $f) = @_;
+								my $info = App::mirai::Future->future($f);
+								my $elapsed = $f->elapsed;
+								my $ms = sprintf '.%03d', int(1000 * ($elapsed - int($f->elapsed)));
+								Future->wrap([
+									$f->label,
+									$info->{created_at} // '?',
+									$info->{ready_at} // '?',
+									($info->{type} eq 'dependent' ? 'dep' : $info->{type}),
+									strftime('%H:%M:%S', gmtime int $elapsed) . $ms
+								]);
+							}], columns => [
+								{ label => 'Label' },
+								{ label => 'Created', transform => [$truncate] },
+								{ label => 'Cancelled', transform => [$truncate] },
+								{ label => 'Type', width => 5 },
+								{ label => 'Elapsed', align => 'right', width => 12},
+							], 'parent:label' => 'Pending (1)';
+							$tbl->adapter->push([ my $f = Future->new->set_label('test') ]);
+							tickit->later($f->curry::done);
+						}
 						static 'tab 2', 'parent:label' => 'Failed (42)';
 						static 'tab 2', 'parent:label' => 'Cancelled (123)';
 					} ribbon_class => 'App::mirai::Tickit::TabRibbon',

@@ -73,6 +73,14 @@ BEGIN {
 	my $prep = sub {
 		my $f = shift;
 		my (undef, $file, $line) = caller(1);
+		my $stack = do {
+			my @stack;
+			my $idx = 1;
+			while(my @x = caller($idx++)) {
+				unshift @stack, [ @x[1,2] ];
+			}
+			\@stack
+		};
 		if(exists $FUTURE_MAP{$f}) {
 			$FUTURE_MAP{$f}{type} = (exists $f->{subs} ? 'dependent' : 'leaf');
 			return $f;
@@ -88,6 +96,7 @@ BEGIN {
 			dependents => [ ],
 			type => (exists $f->{subs} ? 'dependent' : 'leaf'),
 			created_at => "$file:$line",
+			creator_stack => $stack,
 			nodes => [
 			],
 		};
@@ -99,6 +108,14 @@ BEGIN {
 			my $f = shift;
 			my (undef, $file, $line) = caller(2);
 			$FUTURE_MAP{$f}->{ready_at} = "$file:$line";
+			$FUTURE_MAP{$f}->{ready_stack} = do {
+				my @stack;
+				my $idx = 1;
+				while(my @x = caller($idx++)) {
+					unshift @stack, [ @x[1,2] ];
+				}
+				\@stack
+			};
 			# cluck "here -> $f";
 			$_->invoke_event(on_ready => $f) for grep defined, @WATCHERS;
 		});

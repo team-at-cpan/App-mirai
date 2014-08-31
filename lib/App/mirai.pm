@@ -41,13 +41,26 @@ Japanese vocabulary.
 
 =cut
 
-use constant FORMAT => $ENV{MIRAI_FORMAT} || 'JSON'; # Sereal
+=head2 SERIALISATION
+
+Defines the serialisation format to use. Prefers L<Sereal> if available, will fall back
+to JSON via L<JSON::MaybeXS>. Set C< MIRAI_SERIALISATION > to override:
+
+=over 4
+
+=item * Sereal
+
+=item * JSON
+
+=back
+
+=cut
+
+use constant SERIALISATION => $ENV{MIRAI_SERIALISATION} || (eval { require Sereal } ? 'Sereal' : 'JSON');
 
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use IO::Handle;
 
-use if FORMAT eq 'Sereal', 'Sereal';
-use if FORMAT eq 'JSON', 'JSON::MaybeXS';
 
 sub run_test {
 	package App::mirai::MonitoredCode; # Some::Code;

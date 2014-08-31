@@ -23,6 +23,8 @@ use Carp qw(cluck);
 
 use App::mirai::Watcher;
 
+# Elapsed time is important to us, even though we could leave this off and
+# track it ourselves
 BEGIN { $Future::TIMES = 1 }
 
 our %FUTURE_MAP;
@@ -32,14 +34,17 @@ our @WATCHERS;
 
 Returns a new L<App::mirai::Watcher>.
 
+ my $watcher = App::mirai::Future->create_watcher;
+ $watcher->subscribe_to_event(
+  create => sub { my ($ev, $f) = @_; warn "Created new future: $f\n" },
+ );
+
 =cut
 
 sub create_watcher {
 	my $class = shift;
 	push @WATCHERS, my $w = App::mirai::Watcher->new;
 	$w->subscribe_to_event(@_) if @_;
-	# explicit discard
-#	Scalar::Util::weaken $WATCHERS[-1];
 	$w
 }
 
@@ -70,8 +75,12 @@ sub futures {
 
 =head1 MONKEY PATCHES
 
+These reach deep into L<Future> and are likely to break any time a new version
+is released.
+
 =cut
 
+{ no warnings 'redefine';
 sub Future::DESTROY {
 	my $f = shift;
 	# my $f = $destructor->(@_);
@@ -80,17 +89,19 @@ sub Future::DESTROY {
 	$f
 }
 
-{ no warnings 'redefine';
 sub Future::set_label {
 	my $f = shift;
 	( $f->{label} ) = @_;
 	$_->invoke_event(label => $f) for grep defined, @WATCHERS;
 	return $f;
-} }
+}
+}
 
 BEGIN {
 	my $prep = sub {
 		my $f = shift;
+
+		# Grab the stacktrace first, so we know who started this
 		my (undef, $file, $line) = caller(1);
 		my $stack = do {
 			my @stack;

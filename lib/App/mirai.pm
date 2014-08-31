@@ -108,6 +108,9 @@ BEGIN {
 
 use Future::Utils qw(fmap_void repeat);
 
+use File::HomeDir;
+use File::ShareDir;
+
 use Mixin::Event::Dispatch::Bus;
 use App::mirai::FutureProxy;
 use App::mirai::Tickit;

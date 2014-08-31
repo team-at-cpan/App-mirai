@@ -72,6 +72,7 @@ BEGIN {
 	$child_write->autoflush(1);
 	$parent_write->autoflush(1);
 
+	die "No script provided" unless defined(my $script = shift @ARGV);
 	unless($child_pid = fork // die) {
 		require App::mirai::Subprocess;
 
@@ -89,7 +90,6 @@ BEGIN {
 			my $line = <$child_read>;
 		});
 
-		my $script = shift @ARGV;
 		if(!defined(do $script) && $@) {
 			$child_write->print(
 				pack 'N/a*', $encoder->encode([

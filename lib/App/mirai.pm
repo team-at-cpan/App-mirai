@@ -61,17 +61,6 @@ use constant SERIALISATION => $ENV{MIRAI_SERIALISATION} || (eval { require Serea
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use IO::Handle;
 
-
-sub run_test {
-	package App::mirai::MonitoredCode; # Some::Code;
-	my $f = Future->new->set_label('tester');
-	my @pending = map Future->new->set_label("task_$_"), qw(1 2 3);
-	my $compound = Future->needs_all(@pending)->set_label('needs_all');
-	$pending[0]->done;
-	$pending[1]->fail('error');
-	$f->done('marked');
-}
-
 my ($child_pid);
 my ($child_read, $parent_write);
 my ($child_write, $parent_read);
@@ -82,22 +71,36 @@ BEGIN {
 	socketpair $child_write, $parent_read, AF_UNIX, SOCK_STREAM, PF_UNSPEC or die $!;
 	$child_write->autoflush(1);
 	$parent_write->autoflush(1);
+
 	unless($child_pid = fork // die) {
 		require App::mirai::Subprocess;
 
 		# Wait for permission to start
 		my $line = <$child_read>;
-		$child_read->close or die $!;
-warn "child active\n";
-		my $encoder = FORMAT eq 'JSON' ? JSON::MaybeXS->new(utf8 => 1) : Sereal::Encoder->new;
+		# $child_read->close or die $!;
+
+		my $encoder = SERIALISATION eq 'JSON' ? JSON::MaybeXS->new(utf8 => 1) : Sereal::Encoder->new;
 		App::mirai::Subprocess->setup(sub {
-			warn "Sending $_[0] message for " . $_[1]->{id} . "\n";
 			eval {
 				$child_write->print(pack 'N/a*', $encoder->encode(\@_));
 			} or warn $@;
-			warn "Sent\n";
+
+			# Single-step mode... not very efficient at all.
+			my $line = <$child_read>;
 		});
-		run_test();
+
+		my $script = shift @ARGV;
+		if(!defined(do $script) && $@) {
+			$child_write->print(
+				pack 'N/a*', $encoder->encode([
+					error => {
+						location => $script,
+						exception => $@
+					}
+				])
+			);
+		}
+
 		$child_write->close or die $!;
 		exit 0;
 	}

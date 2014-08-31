@@ -129,31 +129,6 @@ sub run {
 	my $tickit = App::mirai::Tickit->new(bus => $self->bus);
 	my $loop = App::mirai::Tickit::loop();
 	$loop->add(
-		my $cs = IO::Async::Stream->new(
-			read_handle => $parent_read,
-			on_read => sub {
-				my ($stream, $buff, $eof) = @_;
-				warn "EOF" if $eof;
-				if(length $$buff >= 4) {
-					my $size = unpack 'N', substr $$buff, 0, 4, '';
-					warn "Should read $size bytes\n";
-					die "size is fucked" unless $size < 10485760;
-					return sub {
-						my ($stream, $buff, $eof) = @_;
-						warn "EOF in data read";
-						warn "Have " . length($$buff) . " out of $size\n";
-						return 0 unless length($$buff) >= $size;
-						warn "All data available, do the frame\n";
-						$self->incoming_frame(substr $$buff, 0, $size, '');
-						warn "REturning\n";
-						undef
-					}
-				}
-				0
-			}
-		)
-	);
-	$loop->add(
 		my $ps = IO::Async::Stream->new(
 			write_handle => $parent_write,
 			on_read => sub {
@@ -164,15 +139,39 @@ sub run {
 			}
 		)
 	);
+	$loop->add(
+		my $cs = IO::Async::Stream->new(
+			read_handle => $parent_read,
+			on_read => sub {
+				my ($stream, $buff, $eof) = @_;
+				if(length $$buff >= 4) {
+					my $size = unpack 'N', substr $$buff, 0, 4, '';
+					# just in case someone tries to use a single socketpair
+					# for all communications and gets back our starter message
+					# instead of the encoded data we were expecting >_>
+					die "size is fucked" unless $size < 10485760;
+
+					return sub {
+						my ($stream, $buff, $eof) = @_;
+						return 0 unless length($$buff) >= $size;
+						$self->incoming_frame(substr $$buff, 0, $size, '');
+						$ps->write("ok\n");
+						undef
+					}
+				}
+				0
+			}
+		)
+	);
 	$tickit->prepare;
 	$tickit->watcher_future->on_done(sub {
-		$ps->write("ok go\n");
-		$ps->close or die $!;
+		$ps->write("go\n");
+#		$ps->close or die $!;
 	});
 	$tickit->run;
 }
 
-sub decoder { shift->{decoder} ||= FORMAT eq 'JSON' ? JSON::MaybeXS->new(utf8 => 1) : Sereal::Decoder->new; }
+sub decoder { shift->{decoder} ||= SERIALISATION eq 'JSON' ? JSON::MaybeXS->new(utf8 => 1) : Sereal::Decoder->new; }
 
 sub incoming_frame {
 	my ($self, $frame) = @_;
@@ -182,7 +181,7 @@ sub incoming_frame {
 
 	my $data = $self->decoder->decode($frame);
 	my ($cmd, $args) = @$data;
-	warn "Had $cmd => $args\n";
+#	warn "Had $cmd => $args\n";
 	my $f;
 	if($cmd eq 'create') {
 		$f = App::mirai::FutureProxy->new(%$args);
@@ -207,6 +206,20 @@ sub incoming_frame {
 }
 
 sub bus { shift->{bus} ||= Mixin::Event::Dispatch::Bus->new }
+
+sub user_path {
+	shift->{user_path} //= File::HomeDir->my_dist_data(
+		'App-mirai',
+		{ create => 1 }
+	);
+}
+
+sub share_path {
+	shift->{user_path} //= File::ShareDir->my_dist_data(
+		'App-mirai',
+		{ create => 1 }
+	);
+}
 
 1;
 

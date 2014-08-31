@@ -3,6 +3,12 @@ package App::mirai::Future;
 use strict;
 use warnings;
 
+=head1 NAME
+
+App::mirai::Future - injects debugging code into L<Future>
+
+=cut
+
 use Future;
 use Time::HiRes ();
 use Scalar::Util ();

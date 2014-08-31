@@ -9,7 +9,7 @@ our $VERSION = '0.001';
 
 =head1 NAME
 
-App::mirai -
+App::mirai - debugging for L<Future>-based code
 
 =head1 SYNOPSIS
 
@@ -63,6 +63,12 @@ sub run {
 __END__
 
 =head1 SEE ALSO
+
+=over 4
+
+=item * L<Future>
+
+=back
 
 =head1 AUTHOR
 

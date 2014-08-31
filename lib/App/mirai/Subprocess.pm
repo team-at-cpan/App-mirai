@@ -37,6 +37,7 @@ sub setup {
 			$notify->(ready => {
 				id => refaddr($f),
 				class => ref($f),
+				elapsed => $f->elapsed,
 				status => $info->{status},
 				ready_at => $info->{ready_at},
 				ready_stack => $info->{ready_stack},

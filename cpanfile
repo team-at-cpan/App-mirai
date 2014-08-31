@@ -6,6 +6,7 @@ requires 'Mixin::Event::Dispatch', '>= 1.006';
 requires 'Tickit::DSL', '>= 0.020';
 requires 'File::HomeDir', '>= 1.00';
 requires 'JSON::MaybeXS', 0;
+requires 'Sereal', '>= 3.000';
 
 on 'test' => sub {
 	requires 'Test::More', '>= 0.98';

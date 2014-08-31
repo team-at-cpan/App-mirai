@@ -70,10 +70,18 @@ sub futures {
 sub Future::DESTROY {
 	my $f = shift;
 	# my $f = $destructor->(@_);
-	my $entry = delete $FUTURE_MAP{$f};
 	$_->invoke_event(destroy => $f) for grep defined, @WATCHERS;
+	my $entry = delete $FUTURE_MAP{$f};
 	$f
 }
+
+{ no warnings 'redefine';
+sub Future::set_label {
+	my $f = shift;
+	( $f->{label} ) = @_;
+	$_->invoke_event(label => $f) for grep defined, @WATCHERS;
+	return $f;
+} }
 
 BEGIN {
 	my $prep = sub {
@@ -83,7 +91,7 @@ BEGIN {
 			my @stack;
 			my $idx = 1;
 			while(my @x = caller($idx++)) {
-				unshift @stack, [ @x[1,2] ];
+				unshift @stack, [ @x[0, 1, 2] ];
 			}
 			\@stack
 		};
@@ -103,22 +111,26 @@ BEGIN {
 			type => (exists $f->{subs} ? 'dependent' : 'leaf'),
 			created_at => "$file:$line",
 			creator_stack => $stack,
-			nodes => [
-			],
+			status => 'pending',
 		};
 		Scalar::Util::weaken($entry->{future});
 		$FUTURE_MAP{$f} = $entry;
-		$f->set_label('unknown');
 		my $name = "$f";
 		$f->on_ready(sub {
 			my $f = shift;
 			my (undef, $file, $line) = caller(2);
+			$FUTURE_MAP{$f}->{status} = 
+				  $f->{failure}
+				? "failed"
+				: $f->{cancelled}
+				? "cancelled"
+				: "done";
 			$FUTURE_MAP{$f}->{ready_at} = "$file:$line";
 			$FUTURE_MAP{$f}->{ready_stack} = do {
 				my @stack;
 				my $idx = 1;
 				while(my @x = caller($idx++)) {
-					unshift @stack, [ @x[1,2] ];
+					unshift @stack, [ @x[0,1,2] ];
 				}
 				\@stack
 			};

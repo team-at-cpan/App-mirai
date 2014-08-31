@@ -29,9 +29,120 @@ MenuBar { bg: 'blue'; fg: 'hi-yellow'; rv: 0; highlight-fg: 'black'; }
 Menu { bg: '232'; fg: 'white'; rv: 0; }
 Table { highlight-bg: '238'; highlight-fg: 'hi-yellow'; highlight-b: 0; }
 FileViewer { highlight-b: 0; }
+GridBox { col-spacing: 1; }
 EOF
 
-sub new { bless {}, shift }
+sub new { my $class = shift; bless {@_}, $class }
+
+=head2 stack_table
+
+Creates a table representing a stack trace.
+
+Activating a row in this table will open a file viewer for the given
+file and line.
+
+=cut
+
+sub stack_table {
+	my ($stack) = @_;
+	my $tbl;
+	my $truncate = sub {
+		my ($row, $col, $item) = @_;
+		my $def = $tbl->{columns}[$col];
+		return $item unless textwidth($item) > $def->{value};
+		substrwidth $item, textwidth($item) - $def->{value};
+	};
+	$tbl = table {
+		my ($row, $data) = @_;
+		my ($item) = @$data;
+		my ($pkg, $file, $line) = @$item;
+		add_widgets {
+			fileviewer {
+			} $file,
+			  'tabsize' => 4,
+			  line => $line - 1,
+			  'parent:label' => $file;
+			  'parent:top' => 3,
+			  'parent:left' => 3;
+		} under => $widget{desktop};
+	} data => $stack,
+	  item_transformations => [sub {
+	  	my ($row, $item) = @_;
+		Future->wrap([ @{$item}[1,2] ])
+	  } ],
+	  # failure_transformations => sub { ' ' },
+	  view_transformations => [$truncate],
+	  columns => [
+		{ label => 'File' },
+		{ label => 'Line', align => 'right', width => 6 },
+	], 'parent:expand' => 1;
+}
+
+=head2 future_details
+
+Opens a panel with details of the given L<Future>.
+
+=cut
+
+sub future_details {
+	my $f = shift;
+	my $elapsed = sprintf '%.3f', $f->elapsed;
+	add_widgets {
+		vbox {
+			gridbox {
+				gridrow {
+					static 'Type';
+					static $f->type;
+				};
+				gridrow {
+					static 'Status';
+					static $f->status;
+				};
+				gridrow {
+					static 'Label';
+					static $f->label;
+				};
+				gridrow {
+					static 'Elapsed';
+					static $elapsed . 's';
+				};
+				gridrow {
+					static 'Created at';
+					static $f->created_at;
+				};
+				gridrow {
+					static 'Ready at';
+					static $f->ready_at;
+				};
+			};
+			hbox {
+				tree {
+
+				} data => [ Deps => [qw(x y z)] ],
+				  'parent:expand' => 1
+					if $f->type ne 'leaf';
+				vbox {
+					static 'Creation stack', align => 0.5;
+					stack_table($f->creator_stack);
+				} 'parent:expand' => 1;
+				vbox {
+					static 'Marked ready stack', align => 0.5;
+					stack_table($f->ready_stack);
+				} 'parent:expand' => 1;
+			} 'parent:expand' => 1;
+		} style => { spacing => 1 },
+		  'parent:label' => $f->label . ' (' . $f->status . ', ' . $elapsed . 's)',
+		  'parent:top' => 3,
+		  'parent:left' => 3,
+		  'parent:lines' => 12;
+	} under => $widget{desktop}
+}
+
+=head2 app_about
+
+Shows the C< About > dialog popup.
+
+=cut
 
 sub app_about {
 	my $vbox = shift;
@@ -62,6 +173,12 @@ sub app_about {
 	  right => int($tw - ($tw-$w)/2),
 	  bottom => int($th - ($th-$h)/2);
 }
+
+=head2 app_menu
+
+Populates menu items.
+
+=cut
 
 sub app_menu {
 	menubar {
@@ -103,7 +220,14 @@ sub app_menu {
 	};
 }
 
+=head2 apply_layout
+
+Sets up the UI.
+
+=cut
+
 sub apply_layout {
+	my ($self) = @_;
 	vbox {
 		floatbox {
 			vbox {
@@ -143,55 +267,46 @@ sub apply_layout {
 					  'parent:label' => 'Futures';
 					tabbed {
 						{ # Cancelled
-							my $tbl;
-							my $truncate = sub {
-								my ($row, $col, $item) = @_;
-								my $def = $tbl->{columns}[$col];
-								return Future->wrap($item) unless textwidth($item) > $def->{value};
-								Future->wrap(substrwidth $item, textwidth($item) - $def->{value});
-							};
-							$tbl = table {
-								my ($row, $future) = @_;
-							} failure_transformations => sub { ' ' },
-							  item_transformations => [sub {
-								my ($row, $f) = @_;
-								my $info = App::mirai::Future->future($f);
-								my $elapsed = $f->elapsed;
-								my $ms = sprintf '.%03d', int(1000 * ($elapsed - int($f->elapsed)));
-								Future->wrap([
-									$f->label,
-									$info->{created_at} // '?',
-									$info->{ready_at} // '?',
-									($info->{type} eq 'dependent' ? 'dep' : $info->{type}),
-									strftime('%H:%M:%S', gmtime int $elapsed) . $ms
-								]);
-							}], columns => [
-								{ label => 'Label' },
-								{ label => 'Created', transform => [$truncate] },
-								{ label => 'Ready', transform => [$truncate] },
-								{ label => 'Type', width => 5 },
-								{ label => 'Elapsed', align => 'right', width => 12},
-							], 'parent:label' => 'Pending (1)';
-
-							$tbl->adapter->bus->subscribe_to_event(
-								splice => sub {
-									my ($ev, $idx, $len, $data) = @_;
-									$_->on_ready(sub {
-										my $f = shift;
-										my $old_idx = $idx;
-										my $task = $tbl->adapter->find_from($idx, $f)->on_done(sub {
-											my ($idx) = @_;
-											$tbl->adapter->bus->invoke_event(modify => $idx => $f);
-										})->on_fail(sub { warn "failed? @_"});
-										$task->on_ready(sub { undef $task });
-									}) for @$data;
-								}
-							);
-							$tbl->adapter->push([ my $f = Future->new->set_label('test') ]);
-							tickit->later($f->curry::done);
+							my %table;
+							for (qw(pending done failed cancelled)) {
+								my $type = $_;
+								my $tbl;
+								my $truncate = sub {
+									my ($row, $col, $item) = @_;
+									my $def = $tbl->{columns}[$col];
+									return $item unless textwidth($item) > $def->{value};
+									substrwidth $item, textwidth($item) - $def->{value};
+								};
+								$table{$type} = $tbl = table {
+									my ($row, $data) = @_;
+									my $future = $data->[0];
+									eval {
+										future_details($future);1
+									} or warn ":: $@";
+								} #failure_transformations => sub { ' ' },
+								  view_transformations => [$truncate],
+								  item_transformations => [sub {
+									my ($row, $f) = @_;
+									my $elapsed = $f->elapsed;
+									my $ms = sprintf '.%03d', int(1000 * ($elapsed - int($f->elapsed)));
+									Future->wrap([
+										$f,
+										$f->created_at // '?',
+										($type ne 'pending' ? $f->ready_at // '?' : ()),
+										($f->type eq 'dependent' ? 'dep' : $f->type),
+										strftime('%H:%M:%S', gmtime int $elapsed) . $ms
+									]);
+								}], columns => [
+									{ label => 'Label', transform => [sub { Future->wrap($_[2]->label) }] },
+									{ label => 'Created' },
+									($type ne 'pending' ? { label => 'Ready' } : ()),
+									{ label => 'Type', width => 5 },
+									{ label => 'Elapsed', align => 'right', width => 12},
+								], 'parent:label' => ucfirst($type) . ' (0)';
+							}
+							$self->apply_watchers(\%table);
+							loop->later($self->watcher_future->curry::done);
 						}
-						static 'tab 2', 'parent:label' => 'Failed (42)';
-						static 'tab 2', 'parent:label' => 'Cancelled (123)';
 					} ribbon_class => 'App::mirai::Tickit::TabRibbon',
 					  tab_position => 'top',
 					  'parent:label' => 'By state';
@@ -207,9 +322,62 @@ sub apply_layout {
 	$widget{statusbar}->update_status('OK');
 }
 
-sub run {
+sub apply_watchers {
+	my ($self, $table) = @_;
+	my %fp;
+	warn "applying watchers\n";
+	$table->{pending}->adapter->bus->subscribe_to_event(
+		splice => sub {
+			my ($ev, $idx, $len, $data) = @_;
+			do { warn "set $_ => $idx\n"; $fp{$_->id} = $idx++ } for @$data;
+		}
+	);
+	$self->bus->subscribe_to_event(
+		create => sub {
+			my ($ev, $f) = @_;
+			warn "Create $f, stack is:\n";
+			for(@{$f->{creator_stack}}) {
+				warn "* $_->[0] for $f\n";
+			}
+			$table->{pending}->adapter->push([$f]);
+		},
+		label => sub {
+			my ($ev, $f) = @_;
+			die "label missing entry $f (" . $f->id . ")" unless exists $fp{$f->id};
+			my $task = $table->{$f->status}->adapter->find_from($fp{$f->id}, $f)->then(sub {
+				my ($idx) = @_;
+				die "have invald index" unless defined $idx;
+				$table->{$f->status}->adapter->modify($idx, $f)
+			})->on_fail(sub { warn "failed? @_"});
+			$task->on_ready(sub { undef $task });
+		},
+		ready => sub {
+			my ($ev, $f) = @_;
+			$table->{$f->status}->adapter->push([ $f ]);
+			die "mark missing entry $f (" . $f->label . " is " . $f->id . ") as ready" unless exists $fp{$f->id};
+			my $task = $table->{pending}->adapter->find_from(delete $fp{$f->id}, $f)->then(sub {
+				my ($idx) = @_;
+				die "have invald index" unless defined $idx;
+				$table->{pending}->adapter->delete($idx)
+			})->on_fail(sub { warn "failed? @_"});
+			$task->on_ready(sub { undef $task });
+		},
+		destroy => sub {
+			my ($ev, $f) = @_;
+			warn "destroy missing entry" unless exists $fp{$f->id};
+			return;
+			my $task = $table->{pending}->adapter->find_from($fp{$f->id}, $f)->on_done(sub {
+				my ($idx) = @_;
+				$table->{pending}->adapter->splice($idx, 1, []);
+			})->on_fail(sub { warn "failed? @_"});
+			$task->on_ready(sub { undef $task });
+		}
+	);
+}
+
+sub prepare {
 	my ($self) = @_;
-	apply_layout();
+	$self->apply_layout;
 	if(-r "$path/last_session") {
 		open my $fh, '<', "$path/last_session" or die $!;
 		my $session = decode_json(do { local $/; <$fh> });
@@ -233,8 +401,14 @@ sub run {
 			];
 		});
 	}
-	tickit->run;
+	$self
 }
+
+sub bus { shift->{bus} }
+
+sub watcher_future { shift->{watcher_future} ||= loop->new_future->set_label('watcher_future') }
+
+sub run { tickit->run }
 
 1;
 

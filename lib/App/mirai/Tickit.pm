@@ -29,6 +29,8 @@ sub load_styles {
 			}
 		}
 	}
+
+	# Fallback styles
 	Tickit::Style->load_style(<<'EOF');
 Breadcrumb {
  powerline: 1;
@@ -81,7 +83,7 @@ sub stack_table {
 	  	my ($row, $item) = @_;
 		Future->wrap([ @{$item}[1,2] ])
 	  } ],
-	  # failure_transformations => sub { ' ' },
+	  failure_transformations => sub { ' ' },
 	  view_transformations => [$truncate],
 	  columns => [
 		{ label => 'File' },
@@ -278,7 +280,7 @@ sub apply_layout {
 					} 'parent:top' => 3,
 					  'parent:left' => 3,
 					  'parent:lines' => 5,
-					  'parent:label' => 'Futures';
+					  'parent:label' => 'Dependencies';
 					tabbed {
 						{ # Cancelled
 							my %table;
@@ -287,6 +289,7 @@ sub apply_layout {
 								my $tbl;
 								my $truncate = sub {
 									my ($row, $col, $item) = @_;
+									return '' unless defined $item;
 									my $def = $tbl->{columns}[$col];
 									return $item unless textwidth($item) > $def->{value};
 									substrwidth $item, textwidth($item) - $def->{value};
@@ -297,12 +300,12 @@ sub apply_layout {
 									eval {
 										future_details($future);1
 									} or warn ":: $@";
-								} #failure_transformations => sub { ' ' },
+								} failure_transformations => sub { ' ' },
 								  view_transformations => [$truncate],
 								  item_transformations => [sub {
 									my ($row, $f) = @_;
 									my $elapsed = $f->elapsed // 0;
-									my $ms = sprintf '.%03d', int(1000 * ($elapsed - int($f->elapsed)));
+									my $ms = sprintf '.%03d', int(1000 * ($elapsed - int($elapsed)));
 									Future->wrap([
 										$f,
 										$f->created_at // '?',
@@ -323,7 +326,7 @@ sub apply_layout {
 						}
 					} ribbon_class => 'App::mirai::Tickit::TabRibbon',
 					  tab_position => 'top',
-					  'parent:label' => 'By state';
+					  'parent:label' => 'Futures';
 					fileviewer {
 					} 'example.pl',
 					  'tabsize' => 4,
@@ -358,10 +361,12 @@ sub apply_watchers {
 	$self->bus->subscribe_to_event(
 		create => sub {
 			my ($ev, $f) = @_;
+			die "wtf undef?" unless defined $f;
 			$table->{$f->status}->adapter->push([$f]);
 		},
 		label => sub {
 			my ($ev, $f) = @_;
+			die "wtf undef?" unless defined $f;
 			die "label missing entry $f (" . $f->id . ")" unless exists $fp{$f->id};
 
 			# Trigger refresh for this item
@@ -375,6 +380,7 @@ sub apply_watchers {
 		},
 		ready => sub {
 			my ($ev, $f) = @_;
+			die "wtf undef?" unless defined $f;
 			die "mark missing entry $f (" . $f->label . " is " . $f->id . ") as ready" unless exists $fp{$f->id};
 			my $task = $table->{pending}->adapter->find_from(delete $fp{$f->id}, $f)->then(sub {
 				my ($idx) = @_;
@@ -391,6 +397,7 @@ sub apply_watchers {
 		},
 		destroy => sub {
 			my ($ev, $f) = @_;
+			die "wtf undef?" unless defined $f;
 			warn "destroy missing entry" unless exists $fp{$f->id};
 
 			my $task = $table->{$f->status}->adapter->find_from($fp{$f->id}, $f)->on_done(sub {

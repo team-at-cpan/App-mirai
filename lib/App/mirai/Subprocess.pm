@@ -13,6 +13,7 @@ sub setup {
 	$w->subscribe_to_event(
 		create => sub {
 			my ($ev, $f) = @_;
+			warn "CREATE: $f\n";
 			my $info = App::mirai::Future->future($f);
 			my $copy = { %$info };
 			delete $copy->{future};
@@ -20,7 +21,8 @@ sub setup {
 				%$copy,
 				id => refaddr($f),
 				class => ref($f),
-				dependents => [ map refaddr($_), $f->{subs} ],
+				deps => [ map refaddr($_), @{ $f->{deps} || [] } ],
+				subs => [ map refaddr($_), @{ $f->{subs} || [] } ],
 			});
 		},
 		label => sub {

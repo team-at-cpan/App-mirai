@@ -12,7 +12,8 @@ sub _delete { delete $ID{$_[1]} }
 
 sub id { shift->{id} }
 sub class { shift->{class} }
-sub dependents { shift->{dependents} }
+sub deps { shift->{deps} }
+sub subs { shift->{subs} }
 sub status { shift->{status} }
 sub elapsed { shift->{elapsed} }
 sub ready_at { shift->{ready_at} }

@@ -32,7 +32,7 @@ is($Future::TIMES, 1, 'timing enabled');
 			my ($ev, $f) = @_;
 			--$count;
 			isa_ok($f, 'Future');
-			ok((0 == grep $_ == $f, App::mirai::Future->futures), 'is no longer listed in ->futures');
+			ok((1 == grep $_ == $f, App::mirai::Future->futures), 'still listed in ->futures');
 		}
 	);
 	is($count, 0, 'count starts at zero');
@@ -40,6 +40,7 @@ is($Future::TIMES, 1, 'timing enabled');
 	is($count, 1, 'count now 1');
 	dispose $f;
 	is($count, 0, 'count now 0');
+	ok((0 == grep $_ == $f, App::mirai::Future->futures), 'was removed from ->futures');
 	App::mirai::Future->delete_watcher($w);
 	{
 		my $f = Future->new;
@@ -85,7 +86,6 @@ is($Future::TIMES, 1, 'timing enabled');
 { # ->needs_all
 	my $w = App::mirai::Future->create_watcher;
 	my $count = 0;
-	my $dependents = 0;
 	$w->subscribe_to_event(
 		create => sub {
 			my ($ev, $f) = @_;
@@ -94,10 +94,6 @@ is($Future::TIMES, 1, 'timing enabled');
 		destroy => sub {
 			my ($ev, $f) = @_;
 			--$count;
-		},
-		dependent => sub {
-			my ($ev, $f) = @_;
-			++$dependents;
 		},
 		on_ready => sub {
 			my ($ev, $f) = @_;
@@ -110,10 +106,10 @@ is($Future::TIMES, 1, 'timing enabled');
 	);
 	my @pending = map Future->new, 1..3;
 	is($count, 3, 'created 3 futures');
-	is($dependents, 0, 'no deps yet');
 	my $f = Future->needs_all(@pending);
 	is($count, 4, 'created a dependent future');
-	is($dependents, 1, 'have dep');
+	is_deeply(App::mirai::Future->future($f)->{subs}, \@pending, 'subs match');
+	is_deeply(App::mirai::Future->future($_)->{dependents}, [ $f ], 'listed in deps') for @pending;
 	$pending[0]->cancel;
 	$w->discard;
 }

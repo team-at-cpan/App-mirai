@@ -111,27 +111,40 @@ BEGIN {
 			}
 			\@stack
 		};
+
+		# I don't know why this is here.
 		if(exists $FUTURE_MAP{$f}) {
 			$FUTURE_MAP{$f}{type} = (exists $f->{subs} ? 'dependent' : 'leaf');
 			return $f;
 		}
+
+		# We don't use this either
 		$f->{constructed_at} = do {
 			my $at = Carp::shortmess( "constructed" );
 			chomp $at; $at =~ s/\.$//;
 			$at
 		};
 
+		# This is our record, we'll update it when we're marked as ready
 		my $entry = {
-			future => $f,
-			dependents => [ ],
-			type => (exists $f->{subs} ? 'dependent' : 'leaf'),
-			created_at => "$file:$line",
+			future        => $f,
+			deps          => [ ],
+			type          => (exists $f->{subs} ? 'dependent' : 'leaf'),
+			created_at    => "$file:$line",
 			creator_stack => $stack,
-			status => 'pending',
+			status        => 'pending',
 		};
+
+		# ... but we don't want to hold on to the real Future and cause cycles,
+		# memory isn't free
 		Scalar::Util::weaken($entry->{future});
-		$FUTURE_MAP{$f} = $entry;
+
 		my $name = "$f";
+		$FUTURE_MAP{$name} = $entry;
+
+		# Yes, this means we're modifying the callback list: if we later
+		# add suppoort for debugging the callbacks as well, we'd need to
+		# take this into account.
 		$f->on_ready(sub {
 			my $f = shift;
 			my (undef, $file, $line) = caller(2);
@@ -150,21 +163,28 @@ BEGIN {
 				}
 				\@stack
 			};
-			# cluck "here -> $f";
+
 			$_->invoke_event(on_ready => $f) for grep defined, @WATCHERS;
 		});
 	};
 
 	my %map = (
+		# Creating a leaf Future, or called via _new_dependent
 		new => sub {
 			my $constructor = shift;
 			sub {
 				my $f = $constructor->(@_);
 				$prep->($f);
-				$_->invoke_event(create => $f) for grep defined, @WATCHERS;
+				# hahaha
+				my ($sub) = (caller 1)[3];
+				unless($sub && $sub eq 'Future::_new_dependent') {
+					$_->invoke_event(create => $f) for grep defined, @WATCHERS;
+				}
 				$f
 			};
 		},
+
+		# ->needs_all, ->want_any, etc.
 		_new_dependent => sub {
 			my $constructor = shift;
 			sub {
@@ -172,13 +192,14 @@ BEGIN {
 				my $f = $constructor->(@_);
 				$prep->($f);
 				my $entry = $FUTURE_MAP{$f};
+				$entry->{subs} = \@subs;
 				# Inform subs that they have a new parent
 				for(@subs) {
 					die "missing future map entry for $_?" unless exists $FUTURE_MAP{$_};
-					push @{$FUTURE_MAP{$_}{dependents}}, $f;
-					Scalar::Util::weaken($FUTURE_MAP{$_}{dependents}[-1]);
+					push @{$FUTURE_MAP{$_}{deps}}, $f;
+					Scalar::Util::weaken($FUTURE_MAP{$_}{deps}[-1]);
 				}
-				$_->invoke_event(dependent => $f) for grep defined, @WATCHERS;
+				$_->invoke_event(create => $f) for grep defined, @WATCHERS;
 				$f
 			};
 		},

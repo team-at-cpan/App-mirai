@@ -298,7 +298,7 @@ sub apply_layout {
 									my ($row, $data) = @_;
 									my $future = $data->[0];
 									eval {
-										future_details($future);1
+										future_details($future); 1
 									} or warn ":: $@";
 								} failure_transformations => sub { ' ' },
 								  view_transformations => [$truncate],
@@ -372,8 +372,7 @@ sub apply_watchers {
 			# Trigger refresh for this item
 			my $task = $table->{$f->status}->adapter->find_from($fp{$f->id}, $f)->then(sub {
 				my ($idx) = @_;
-				die "have invald index" unless defined $idx;
-				warn "IDX for " . $f->id . " was $idx in " . $f->status . "\n";
+				die "have invalid index" unless defined $idx;
 				$table->{$f->status}->adapter->modify($idx, $f)
 			})->on_fail(sub { warn "failed? @_"});
 			$task->on_ready(sub { undef $task });
@@ -384,8 +383,7 @@ sub apply_watchers {
 			die "mark missing entry $f (" . $f->label . " is " . $f->id . ") as ready" unless exists $fp{$f->id};
 			my $task = $table->{pending}->adapter->find_from(delete $fp{$f->id}, $f)->then(sub {
 				my ($idx) = @_;
-				die "have invald index" unless defined $idx;
-				warn "IDX for " . $f->id . " was $idx in " . $f->status . "\n";
+				die "have invalid index" unless defined $idx;
 				$f->status ne 'pending'
 				? $table->{pending}->adapter->delete($idx)
 				: Future->wrap
@@ -402,7 +400,6 @@ sub apply_watchers {
 
 			my $task = $table->{$f->status}->adapter->find_from($fp{$f->id}, $f)->on_done(sub {
 				my ($idx) = @_;
-				warn "IDX for " . $f->id . " was $idx in " . $f->status . " for destroy\n";
 				$table->{$f->status}->adapter->modify($idx, $f)
 #				$table->{$f->status}->expose_row($idx);
 			})->on_fail(sub { warn "failed? @_"});
@@ -423,9 +420,7 @@ sub prepare {
 			my @win = @{$widget{desktop}->{widgets}};
 			for my $widget (@win) {
 				my $label = $widget->label;
-				warn "have widget with label $label";
 				if(exists $session->{$label}) {
-					warn "Set geometry: ", join(',', @{$session->{$label}->{geometry}});
 					$widget->window->change_geometry(
 						@{$session->{$label}->{geometry}}
 					)

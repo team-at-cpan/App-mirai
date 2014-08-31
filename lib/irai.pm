@@ -7,6 +7,10 @@ use warnings;
 
 irai - enables L<Future> debugging UI for script
 
+=head1 DESCRIPTION
+
+See L<App::mirai>.
+
 =cut
 
 # Actual work is done by loading this module

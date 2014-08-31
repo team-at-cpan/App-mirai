@@ -13,7 +13,6 @@ sub setup {
 	$w->subscribe_to_event(
 		create => sub {
 			my ($ev, $f) = @_;
-			warn "CREATE: $f\n";
 			my $info = App::mirai::Future->future($f);
 			my $copy = { %$info };
 			delete $copy->{future};

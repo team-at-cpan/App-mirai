@@ -149,7 +149,7 @@ sub run {
 					# just in case someone tries to use a single socketpair
 					# for all communications and gets back our starter message
 					# instead of the encoded data we were expecting >_>
-					die "size is fucked" unless $size < 10485760;
+					die "Unexpected size is fucked" unless $size < 10485760;
 
 					return sub {
 						my ($stream, $buff, $eof) = @_;
@@ -169,6 +169,8 @@ sub run {
 #		$ps->close or die $!;
 	});
 	$tickit->run;
+	$child->close or die $!;
+	waitpid $child_pid, 0;
 }
 
 sub decoder { shift->{decoder} ||= SERIALISATION eq 'JSON' ? JSON::MaybeXS->new(utf8 => 1) : Sereal::Decoder->new; }
@@ -201,8 +203,6 @@ sub incoming_frame {
 		warn "unknown: $cmd => $args\n"
 	}
 	$self->bus->invoke_event($cmd => $f);
-#	$child->close or die $!;
-#	waitpid $child_pid, 0;
 }
 
 sub bus { shift->{bus} ||= Mixin::Event::Dispatch::Bus->new }

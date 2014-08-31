@@ -109,7 +109,7 @@ is($Future::TIMES, 1, 'timing enabled');
 	my $f = Future->needs_all(@pending);
 	is($count, 4, 'created a dependent future');
 	is_deeply(App::mirai::Future->future($f)->{subs}, \@pending, 'subs match');
-	is_deeply(App::mirai::Future->future($_)->{dependents}, [ $f ], 'listed in deps') for @pending;
+	is_deeply(App::mirai::Future->future($_)->{deps}, [ $f ], 'listed in deps') for @pending;
 	$pending[0]->cancel;
 	$w->discard;
 }

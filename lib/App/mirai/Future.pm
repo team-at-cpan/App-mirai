@@ -7,6 +7,11 @@ use warnings;
 
 App::mirai::Future - injects debugging code into L<Future>
 
+=head1 DESCRIPTION
+
+On load, this will monkey-patch L<Future> to provide various precarious
+hooks for Future-related events.
+
 =cut
 
 use Future;

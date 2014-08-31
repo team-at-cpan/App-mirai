@@ -11,16 +11,25 @@ use App::mirai::Tickit::Widget::Logo;
 use Future;
 use POSIX qw(strftime);
 
-use File::HomeDir;
 use JSON::MaybeXS;
+use File::Spec;
 
 my %widget;
-my $path = File::HomeDir->my_dist_data(
-	'App-mirai',
-	{ create => 1 }
-);
 
-Tickit::Style->load_style(<<'EOF');
+sub user_path { File::Spec->catpath($_[0]->{user_path}, $_[1]) }
+sub share_path { File::Spec->catpath($_[0]->{share_path}, $_[1]) }
+
+sub load_styles {
+	my ($self) = shift;
+	for my $base (qw(user_path share_path)) {
+		for my $path (map $self->$base($_), $ENV{TERM} . '.style', 'default.style') {
+			if(-r $path) {
+				Tickit::Style->load_style_file($path);
+				return $self;
+			}
+		}
+	}
+	Tickit::Style->load_style(<<'EOF');
 Breadcrumb {
  powerline: 1;
  highlight-bg: 238;
@@ -31,6 +40,8 @@ Table { highlight-bg: '238'; highlight-fg: 'hi-yellow'; highlight-b: 0; }
 FileViewer { highlight-b: 0; }
 GridBox { col-spacing: 1; }
 EOF
+	$self
+}
 
 sub new { my $class = shift; bless {@_}, $class }
 
@@ -86,7 +97,7 @@ Opens a panel with details of the given L<Future>.
 
 sub future_details {
 	my $f = shift;
-	my $elapsed = sprintf '%.3f', $f->elapsed;
+	my $elapsed = sprintf '%.3f', $f->elapsed // 0;
 	add_widgets {
 		vbox {
 			gridbox {
@@ -174,6 +185,8 @@ sub app_about {
 	  bottom => int($th - ($th-$h)/2);
 }
 
+sub session_path { $_[0]->user_path('last_session') }
+
 =head2 app_menu
 
 Populates menu items.
@@ -181,11 +194,12 @@ Populates menu items.
 =cut
 
 sub app_menu {
+	my ($self) = @_;
 	menubar {
 		submenu File => sub {
 			menuitem 'Open session' => sub { warn 'open' };
 			menuitem 'Save session' => sub {
-				my $sp = "$path/last_session";
+				my $sp = $self->session_path;
 				unlink $sp if -l $sp;
 				my $session = { };
 				my @win = @{$widget{desktop}->{widgets}};
@@ -231,7 +245,7 @@ sub apply_layout {
 	vbox {
 		floatbox {
 			vbox {
-				app_menu();
+				$self->app_menu;
 				$widget{desktop} = desktop {
 					vbox {
 						my $bc = breadcrumb {
@@ -287,7 +301,7 @@ sub apply_layout {
 								  view_transformations => [$truncate],
 								  item_transformations => [sub {
 									my ($row, $f) = @_;
-									my $elapsed = $f->elapsed;
+									my $elapsed = $f->elapsed // 0;
 									my $ms = sprintf '.%03d', int(1000 * ($elapsed - int($f->elapsed)));
 									Future->wrap([
 										$f,
@@ -324,51 +338,66 @@ sub apply_layout {
 
 sub apply_watchers {
 	my ($self, $table) = @_;
+
+	# This is a lookup table for finding the approximate array offset
+	# for a given object. It highlights a gap in the L<Adapter::Async>
+	# API that I'm not sure how to resolve just at the moment.
 	my %fp;
-	warn "applying watchers\n";
-	$table->{pending}->adapter->bus->subscribe_to_event(
-		splice => sub {
-			my ($ev, $idx, $len, $data) = @_;
-			do { warn "set $_ => $idx\n"; $fp{$_->id} = $idx++ } for @$data;
-		}
-	);
+	for my $tbl (values %$table) {
+		$tbl->adapter->bus->subscribe_to_event(
+			splice => sub {
+				my ($ev, $idx, $len, $data) = @_;
+				for (@$data) {
+					die "Future " . $_->id . " (" . $_->label . ") already listed?" if exists $fp{$_->id};
+					$fp{$_->id} = $idx++;
+				}
+			}
+		);
+	}
+
 	$self->bus->subscribe_to_event(
 		create => sub {
 			my ($ev, $f) = @_;
-			warn "Create $f, stack is:\n";
-			for(@{$f->{creator_stack}}) {
-				warn "* $_->[0] for $f\n";
-			}
-			$table->{pending}->adapter->push([$f]);
+			$table->{$f->status}->adapter->push([$f]);
 		},
 		label => sub {
 			my ($ev, $f) = @_;
 			die "label missing entry $f (" . $f->id . ")" unless exists $fp{$f->id};
+
+			# Trigger refresh for this item
 			my $task = $table->{$f->status}->adapter->find_from($fp{$f->id}, $f)->then(sub {
 				my ($idx) = @_;
 				die "have invald index" unless defined $idx;
+				warn "IDX for " . $f->id . " was $idx in " . $f->status . "\n";
 				$table->{$f->status}->adapter->modify($idx, $f)
 			})->on_fail(sub { warn "failed? @_"});
 			$task->on_ready(sub { undef $task });
 		},
 		ready => sub {
 			my ($ev, $f) = @_;
-			$table->{$f->status}->adapter->push([ $f ]);
 			die "mark missing entry $f (" . $f->label . " is " . $f->id . ") as ready" unless exists $fp{$f->id};
 			my $task = $table->{pending}->adapter->find_from(delete $fp{$f->id}, $f)->then(sub {
 				my ($idx) = @_;
 				die "have invald index" unless defined $idx;
-				$table->{pending}->adapter->delete($idx)
+				warn "IDX for " . $f->id . " was $idx in " . $f->status . "\n";
+				$f->status ne 'pending'
+				? $table->{pending}->adapter->delete($idx)
+				: Future->wrap
+			})->then(sub {
+				# We've presumably changed status, so we should now be in a different table
+				$table->{$f->status}->adapter->push([ $f ]);
 			})->on_fail(sub { warn "failed? @_"});
 			$task->on_ready(sub { undef $task });
 		},
 		destroy => sub {
 			my ($ev, $f) = @_;
 			warn "destroy missing entry" unless exists $fp{$f->id};
-			return;
-			my $task = $table->{pending}->adapter->find_from($fp{$f->id}, $f)->on_done(sub {
+
+			my $task = $table->{$f->status}->adapter->find_from($fp{$f->id}, $f)->on_done(sub {
 				my ($idx) = @_;
-				$table->{pending}->adapter->splice($idx, 1, []);
+				warn "IDX for " . $f->id . " was $idx in " . $f->status . " for destroy\n";
+				$table->{$f->status}->adapter->modify($idx, $f)
+#				$table->{$f->status}->expose_row($idx);
 			})->on_fail(sub { warn "failed? @_"});
 			$task->on_ready(sub { undef $task });
 		}
@@ -377,9 +406,11 @@ sub apply_watchers {
 
 sub prepare {
 	my ($self) = @_;
+	$self->load_styles;
 	$self->apply_layout;
-	if(-r "$path/last_session") {
-		open my $fh, '<', "$path/last_session" or die $!;
+	my $path = $self->session_path;
+	if(-r $path) {
+		open my $fh, '<', $path or die "Unable to open last session $path - $!";
 		my $session = decode_json(do { local $/; <$fh> });
 		tickit->later(sub {
 			my @win = @{$widget{desktop}->{widgets}};

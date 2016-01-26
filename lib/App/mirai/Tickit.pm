@@ -65,6 +65,7 @@ sub stack_table {
 		return $item unless textwidth($item) > $def->{value};
 		substrwidth $item, textwidth($item) - $def->{value};
 	};
+	my $path_fix = __PACKAGE__->can('path_fix');
 	$tbl = table {
 		my ($row, $data) = @_;
 		my ($item) = @$data;
@@ -76,7 +77,9 @@ sub stack_table {
 			  line => $line - 1,
 			  'parent:label' => $file;
 			  'parent:top' => 3,
-			  'parent:left' => 3;
+			  'parent:bottom' => 3,
+			  'parent:left' => 3,
+			  'parent:right' => 3;
 		} under => $widget{desktop};
 	} data => $stack,
 	  item_transformations => [sub {
@@ -86,7 +89,7 @@ sub stack_table {
 	  failure_transformations => sub { ' ' },
 	  view_transformations => [$truncate],
 	  columns => [
-		{ label => 'File' },
+		{ label => 'File', transform => [$path_fix] },
 		{ label => 'Line', align => 'right', width => 6 },
 	], 'parent:expand' => 1;
 }
@@ -203,20 +206,8 @@ sub app_menu {
 			menuitem 'Save session' => sub {
 				my $sp = $self->session_path;
 				unlink $sp if -l $sp;
-				my $session = { };
-				my @win = @{$widget{desktop}->{widgets}};
-				for my $widget (@win) {
-					my $label = $widget->label;
-					$session->{$label} = {
-						geometry => [
-							map {;
-								$widget->window->rect->$_
-							} qw(top left lines cols)
-						]
-					};
-				}
 				open my $fh, '>', $sp or die $!;
-				$fh->print(encode_json($session));
+				$fh->print(encode_json($self->session_hash));
 			};
 			menuitem 'Save session as...' => sub { warn 'save as' };
 			menuspacer;
@@ -234,6 +225,30 @@ sub app_menu {
 			};
 		};
 	};
+}
+
+sub session_hash {
+	my ($self) = @_;
+
+	my $session = { };
+	my @win = @{$widget{desktop}->{widgets}};
+	for my $widget (@win) {
+		my $label = $widget->label;
+		$session->{$label} = {
+			geometry => [
+				map {;
+					$widget->window->rect->$_
+				} qw(top left lines cols)
+			]
+		};
+	}
+	$session
+}
+
+sub path_fix {
+	my $item = $_[2];
+	$item =~ s{^\Q$_/}{.../} for @INC;
+	Future->done($item)
 }
 
 =head2 apply_layout
@@ -259,16 +274,12 @@ sub apply_layout {
 						my $tree = tree {
 						} data => [
 							Pending => [
-								qw(label2 label3 label4)
 							],
 							Done => [
-								qw(label5)
 							],
 							Failed => [
-								qw(label6)
 							],
 							Cancelled => [
-								qw(label7)
 							],
 							Dependents => [
 								needs_all => [
@@ -277,13 +288,15 @@ sub apply_layout {
 							],
 						];
 						$bc->adapter($tree->position_adapter);
-					} 'parent:top' => 3,
-					  'parent:left' => 3,
-					  'parent:lines' => 5,
+					} 'parent:top' => 0,
+					  'parent:left' => 0,
+					  'parent:cols' => 32,
+					  'parent:bottom' => 0,
 					  'parent:label' => 'Dependencies';
 					tabbed {
 						{ # Cancelled
 							my %table;
+							my $path_fix = $self->can('path_fix');
 							for (qw(pending done failed cancelled)) {
 								my $type = $_;
 								my $tbl;
@@ -315,8 +328,11 @@ sub apply_layout {
 									]);
 								}], columns => [
 									{ label => 'Label', transform => [sub { Future->wrap($_[2]->label) }] },
-									{ label => 'Created' },
-									($type ne 'pending' ? { label => 'Ready' } : ()),
+									{ label => 'Created', transform => [ $path_fix ] },
+									($type ne 'pending'
+									? { label => 'Ready', transform => [ $path_fix ] }
+									: ()
+									),
 									{ label => 'Type', width => 5 },
 									{ label => 'Elapsed', align => 'right', width => 12},
 								], 'parent:label' => ucfirst($type) . ' (0)';
@@ -326,10 +342,18 @@ sub apply_layout {
 						}
 					} ribbon_class => 'App::mirai::Tickit::TabRibbon',
 					  tab_position => 'top',
+					  'parent:left' => 31,
+					  'parent:right' => 0,
+					  'parent:bottom' => 0,
+					  'parent:lines' => 20,
 					  'parent:label' => 'Futures';
 					fileviewer {
-					} 'example.pl',
+					} 'examples/example.pl',
 					  'tabsize' => 4,
+					  'parent:left' => 31,
+					  'parent:right' => 0,
+					  'parent:top' => 0,
+					  'parent:bottom' => 19,
 					  'parent:label' => 'example.pl';
 				} 'parent:expand' => 1;
 			}
@@ -417,8 +441,8 @@ sub prepare {
 		open my $fh, '<', $path or die "Unable to open last session $path - $!";
 		my $session = decode_json(do { local $/; <$fh> });
 		tickit->later(sub {
-			my @win = @{$widget{desktop}->{widgets}};
-			for my $widget (@win) {
+			my @widgets = @{$widget{desktop}->{widgets}};
+			for my $widget (@widgets) {
 				my $label = $widget->label;
 				if(exists $session->{$label}) {
 					$widget->window->change_geometry(
@@ -426,11 +450,11 @@ sub prepare {
 					)
 				}
 			}
-			$win[0]->{linked_widgets}{right} = [
-				left => $win[1]
+			$widgets[0]->{linked_widgets}{right} = [
+				left => $widgets[1]
 			];
-			$win[0]->{linked_widgets}{top} = [
-				top => $win[1]
+			$widgets[0]->{linked_widgets}{top} = [
+				top => $widgets[1]
 			];
 		});
 	}

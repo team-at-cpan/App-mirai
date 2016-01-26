@@ -1,4 +1,5 @@
 use strict;
+
 use warnings;
 package App::mirai::Tickit::TabRibbon;
 use parent qw(Tickit::Widget::Tabbed::Ribbon);

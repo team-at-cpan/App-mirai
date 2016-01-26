@@ -22,9 +22,9 @@ __END__
 
 =head1 AUTHOR
 
-Tom Molesworth <cpan@perlsite.co.uk>
+Tom Molesworth <TEAM@cpan.org>
 
 =head1 LICENSE
 
-Copyright Tom Molesworth 2014. Licensed under the same terms as Perl itself.
+Copyright Tom Molesworth 2014-2015. Licensed under the same terms as Perl itself.
 

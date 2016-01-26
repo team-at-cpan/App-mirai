@@ -60,6 +60,7 @@ use constant SERIALISATION => $ENV{MIRAI_SERIALISATION} || (eval { require Serea
 
 use Socket qw(AF_UNIX SOCK_STREAM PF_UNSPEC);
 use IO::Handle;
+use JSON::MaybeXS;
 
 my ($child_pid);
 my ($child_read, $parent_write);
@@ -169,7 +170,7 @@ sub run {
 #		$ps->close or die $!;
 	});
 	$tickit->run;
-	$child->close or die $!;
+	$cs->close or die $!;
 	waitpid $child_pid, 0;
 }
 
